@@ -1,0 +1,381 @@
+package gov.match.rules;
+
+import java.util.Arrays;
+import java.util.Set;
+import java.util.List;
+
+import org.apache.commons.lang.StringUtils;
+
+import gov.match.enumeration.PatientStatus;
+import gov.match.enumeration.TreatmentArmStatus;
+import gov.match.enumeration.PatientAssignmentReasonCategory;
+
+import gov.match.model.DrugCombo;
+
+import gov.match.model.fact.MatchType;
+import gov.match.model.fact.PatientFact;
+import gov.match.model.fact.PatientAssignmentFact;
+import gov.match.model.fact.PatientVariantFact;
+import gov.match.model.fact.TreatmentArmFact;
+import gov.match.model.fact.TreatmentArmVariantFact;
+import gov.match.model.fact.TreatmentArmFactStatus;
+
+import org.apache.commons.lang.StringUtils;
+
+rule "Check treatment arm status"
+when
+	$taf: TreatmentArmFact(
+		assignable == false,
+		treatmentArmFactStatus == TreatmentArmFactStatus.UNKNOWN)
+then
+	modify ($taf) {
+		setTreatmentArmFactStatus(TreatmentArmFactStatus.EXCLUDE),
+		setReason("The patient is excluded from this treatment arm because the status is [" + $taf.getTreatmentArmStatus() + "]."),
+		setReasonCategory(PatientAssignmentReasonCategory.ARM_NOT_OPEN);
+	}
+end
+
+rule "Add patient variant fact(s)"
+when
+	$pf: PatientFact()
+	$pvf: PatientVariantFact() from $pf.variantFacts 
+then
+	insert($pvf);
+end
+
+rule "Add patient assignment fact(s)"
+when
+	$pf: PatientFact()
+	$paf: PatientAssignmentFact() from $pf.assignmentFacts 
+then
+	insert($paf);
+end
+
+rule "Add treatment arm variant fact(s)"
+when
+	$taf: TreatmentArmFact(
+			assignable == true, 
+			treatmentArmFactStatus == TreatmentArmFactStatus.UNKNOWN
+		)
+	$tavf: TreatmentArmVariantFact() from $taf.variantFacts
+then
+	insert($tavf);
+end
+
+/* Exclude treatment arms patient has already taken. */
+
+rule "Match treatment arm patient has already taken"
+when
+	$paf: PatientAssignmentFact()
+	$taf: TreatmentArmFact(
+		assignable == true, 
+		treatmentArmFactStatus == TreatmentArmFactStatus.UNKNOWN,
+		$paf.treatmentArmId == treatmentArmId,
+		$paf.status == PatientStatus.ON_TREATMENT_ARM)
+then
+	modify ($taf) {
+		setTreatmentArmFactStatus(TreatmentArmFactStatus.EXCLUDE),
+		setReason("The patient is excluded from this treatment arm because the patient has already taken it."),
+		setReasonCategory(PatientAssignmentReasonCategory.PRIOR_ASSIGNMENT);
+	}
+end
+
+/* Exclude treatment arms patient is not eligible. */
+
+rule "Match treatment arm patient is not eligible"
+when
+	$paf: PatientAssignmentFact()
+	$taf: TreatmentArmFact(
+		assignable == true, 
+		treatmentArmFactStatus == TreatmentArmFactStatus.UNKNOWN,
+		$paf.treatmentArmId == treatmentArmId,
+		$paf.treatmentArmVersion == treatmentArmVersion,
+		($paf.status == PatientStatus.NOT_ELIGIBLE || $paf.status == PatientStatus.TREATMENT_ARM_CLOSED))
+then
+	modify ($taf) {
+		setTreatmentArmFactStatus(TreatmentArmFactStatus.EXCLUDE),
+		setReason("The patient is excluded from this treatment arm because the patient is not eligible."),
+		setReasonCategory(PatientAssignmentReasonCategory.NOT_ELIGIBLE);
+	}
+end
+
+/* Exclude treatment arms rejected by committee. */
+
+rule "Match treatment arm committee rejected"
+when
+	$paf: PatientAssignmentFact()
+	$taf: TreatmentArmFact(
+		assignable == true, 
+		treatmentArmFactStatus == TreatmentArmFactStatus.UNKNOWN,
+		$paf.treatmentArmId == treatmentArmId,
+		$paf.treatmentArmVersion == treatmentArmVersion,
+		$paf.status == PatientStatus.COMMITTEE_REJECTED)
+then
+	modify ($taf) {
+		setTreatmentArmFactStatus(TreatmentArmFactStatus.EXCLUDE),
+		setReason("The patient is excluded from this treatment arm because the committee rejected the assignment report."),
+		setReasonCategory(PatientAssignmentReasonCategory.COMMITTEE_REJECTED);
+	}
+end
+
+/* Exclude treatment arm because a exclusion criteria matches. */
+
+rule "Match patient exclusion criteria with treatment arm exclusion criteria"
+when
+	$pf: PatientFact($pecf: exclusionCriterias)
+	$taf: TreatmentArmFact(
+		assignable == true, 
+		treatmentArmFactStatus == TreatmentArmFactStatus.UNKNOWN,
+		$taecf: exclusionCriterias)
+	$match: Set(size > 0) from collect(String(this memberOf $taecf) from $pecf)
+then
+	modify ($taf) {
+		setTreatmentArmFactStatus(TreatmentArmFactStatus.EXCLUDE),
+		setReason("The patient is excluded from this treatment arm because the patient has exclusion criteria(s) " + Arrays.toString($match.toArray()) + "."),
+		setReasonCategory(PatientAssignmentReasonCategory.RECORD_BASED_EXCLUSION);
+	}
+end
+
+/* Exclude treatment arm because patient prior drugs matches treatment arm exclusion drugs. */
+
+rule "Match patient prior drugs with treatment arm exclusion drugs"
+when
+	$pf: PatientFact($priorDrugs: priorDrugs)
+	$taf: TreatmentArmFact(
+		assignable == true, 
+		treatmentArmFactStatus == TreatmentArmFactStatus.UNKNOWN,
+		$exclusionDrugs: exclusionDrugs)
+	$match: Set(size > 0) from collect(DrugCombo(this memberOf $exclusionDrugs) from $priorDrugs)
+then
+	modify ($taf) {
+		setTreatmentArmFactStatus(TreatmentArmFactStatus.EXCLUDE),
+		setReason("The patient is excluded from this treatment arm because the patient has taken drug(s) " + Arrays.toString($match.toArray()) + "."),
+		setReasonCategory(PatientAssignmentReasonCategory.RECORD_BASED_EXCLUSION);
+	}
+end
+
+/* Exclude treatment arm because patient variant matches treatment arm exclusion variants. */
+
+rule "Match patient variant with treatment arm exclusion variants"
+when
+	$pvf: PatientVariantFact(confirmed == true)
+	$tavf: TreatmentArmVariantFact(
+		identifier == $pvf.identifier,
+		inclusion == false)
+	$taf: TreatmentArmFact(
+		assignable == true, 
+		treatmentArmFactStatus == TreatmentArmFactStatus.UNKNOWN,
+		treatmentArmId == $tavf.treatmentArmId)
+then
+	modify ($taf) {
+		setTreatmentArmFactStatus(TreatmentArmFactStatus.EXCLUDE),
+		setReason("The patient is excluded from this treatment arm because the patient has exclusion variant identifier [" + $pvf.getIdentifier() + "]."),
+		setReasonCategory(PatientAssignmentReasonCategory.RECORD_BASED_EXCLUSION);
+	}
+end
+
+/* Exclude treatment arm because patient nonhotspot variant matches treatment arm nonhotspot exclusion rule. */
+
+rule "Match patient and treatment arm exclusion non-hotspot rule"
+when
+	$pvf: PatientVariantFact(confirmed == true)
+	$tavf: TreatmentArmVariantFact(
+		(oncominevariantclass != null || gene != null || exon != null || func != null),
+		(oncominevariantclass == null || StringUtils.lowerCase(oncominevariantclass) == StringUtils.lowerCase($pvf.oncominevariantclass)),
+		(gene == null || StringUtils.lowerCase(gene) == StringUtils.lowerCase($pvf.gene)),
+		(exon == null || StringUtils.lowerCase(exon) == StringUtils.lowerCase($pvf.exon)),
+		(func == null || StringUtils.lowerCase(func) == StringUtils.lowerCase($pvf.func)),
+		(proteinMatch == null || proteinMatch == '' || StringUtils.lowerCase($pvf.protein) matches proteinMatch),
+		variantType == VariantType.NON_HOTSPOT,
+		inclusion == false)
+	$taf: TreatmentArmFact(
+		assignable == true, 
+		treatmentArmFactStatus == TreatmentArmFactStatus.UNKNOWN,
+		treatmentArmId == $tavf.treatmentArmId)
+then
+	modify ($taf) {
+		setTreatmentArmFactStatus(TreatmentArmFactStatus.EXCLUDE),
+		setReason("The patient is excluded from this treatment arm because the patient has exclusion non-hotspot variant [" + $pvf + "]."),
+		setReasonCategory(PatientAssignmentReasonCategory.RECORD_BASED_EXCLUSION);
+	}
+end
+
+/* Match the variant identifier and set the match type appropriately. */
+
+rule "Match patient and treatment arm variant identifier"
+when
+	$pvf: PatientVariantFact(
+		(readDepth == null || readDepth >= 0),
+		confirmed == true)
+	$tavf: TreatmentArmVariantFact(
+		identifier == $pvf.identifier,
+		matchType == MatchType.NONE,
+		variantType != VariantType.NON_HOTSPOT,
+		inclusion == true)
+then
+	modify ($tavf) {
+		setMatchType(MatchType.IDENTIFIER),
+		appendPatientVariantFact($pvf);
+	}
+end
+
+/* Match the non-hotspot properties and set the match type appropriately. */
+
+rule "Match patient and treatment arm non-hotspot variants"
+when
+	$pvf: PatientVariantFact(
+		(readDepth == null || readDepth >= 0),
+		confirmed == true)
+	$tavf: TreatmentArmVariantFact(
+		(oncominevariantclass != null || gene != null || exon != null || func != null),
+		(oncominevariantclass == null || StringUtils.lowerCase(oncominevariantclass) == StringUtils.lowerCase($pvf.oncominevariantclass)),
+		(gene == null || StringUtils.lowerCase(gene) == StringUtils.lowerCase($pvf.gene)),
+		(exon == null || StringUtils.lowerCase(exon) == StringUtils.lowerCase($pvf.exon)),
+		(func == null || StringUtils.lowerCase(func) == StringUtils.lowerCase($pvf.func)),
+		(proteinMatch == null || proteinMatch == '' || StringUtils.lowerCase($pvf.protein) matches proteinMatch),
+		matchType == MatchType.NONE,
+		variantType == VariantType.NON_HOTSPOT,
+		inclusion == true)
+then
+	modify ($tavf) {
+		setMatchType(MatchType.NONHOTSPOT),
+		appendPatientVariantFact($pvf);
+	}
+end
+
+/*  Set the treatment arm to INCLUDE if the identifier matches. */
+
+rule "Include treatment arms that match any identifier"
+when
+	$tavf: TreatmentArmVariantFact(
+		matchType == MatchType.IDENTIFIER,
+		inclusion == true)
+	$taf: TreatmentArmFact(
+		assignable == true, 
+		treatmentArmFactStatus == TreatmentArmFactStatus.UNKNOWN,
+		treatmentArmId == $tavf.treatmentArmId)
+then
+	modify ($taf) {
+		setTreatmentArmFactStatus(TreatmentArmFactStatus.INCLUDE);
+	}
+end
+
+/* Set the treatment arm to INCLUDE if the non-hotspot properties matches. */
+
+rule "Include treatment arms that match any non-hotspot properties"
+when
+	$tavf: TreatmentArmVariantFact(
+		matchType == MatchType.NONHOTSPOT,
+		inclusion == true)
+	$taf: TreatmentArmFact(
+		assignable == true, 
+		treatmentArmFactStatus == TreatmentArmFactStatus.UNKNOWN,
+		treatmentArmId == $tavf.treatmentArmId)
+then
+	modify ($taf) {
+		setTreatmentArmFactStatus(TreatmentArmFactStatus.INCLUDE);
+	}
+end
+
+/* Remove all patient variants that match the treatment arm's normal identifier or nonhotspot rule. */
+
+rule "Match patient disease with treatment arm exclusion disease and remove all normal matching variants"
+when
+	$pf: PatientFact($pdf: diseases)
+	$taf: TreatmentArmFact(
+		assignable == true,
+		treatmentArmFactStatus == TreatmentArmFactStatus.INCLUDE,
+		$taedf: exclusionDiseases)
+	$dm: Set(size > 0) from collect(String(this memberOf $taedf) from $pf.getDiseasesMedraCode())
+	$sv: List(size > 0) from collect(TreatmentArmVariantFact(inclusion == true, armSpecific == false, patientVariantFacts.size() > 0) from $taf.getVariantFacts())
+then
+    modify ($taf) {
+		removeMatchingPatientNormalVariants();
+	}
+end
+
+/* Exclude treatment arm because a exclusion disease matches and the patient doesn't have any arm specific variant match. */
+
+rule "Match patient disease with treatment arm exclusion disease and no arm specific variant match"
+when
+	$pf: PatientFact($pdf: diseases)
+	$taf: TreatmentArmFact(
+		assignable == true,
+		treatmentArmFactStatus == TreatmentArmFactStatus.INCLUDE,
+		$taedf: exclusionDiseases)
+	$dm: Set(size > 0) from collect(String(this memberOf $taedf) from $pf.getDiseasesMedraCode())
+	$sv: List(size == 0) from collect(TreatmentArmVariantFact(inclusion == true, armSpecific == true, patientVariantFacts.size() > 0) from $taf.getVariantFacts())
+then
+    modify ($taf) {
+		setTreatmentArmFactStatus(TreatmentArmFactStatus.EXCLUDE),
+		setReason("The patient is excluded from this treatment arm because the patient has disease(s) [" + $pf.getDiseasesShortName($dm) + "] and no arm specific rules match."),
+		setReasonCategory(PatientAssignmentReasonCategory.RECORD_BASED_EXCLUSION);
+	}
+end
+
+/* Set the treatment arm assignment reason if there was a matching patient variant. */
+
+rule "Set the treatment arm inclusion reasons"
+when
+	$taf: TreatmentArmFact(
+		treatmentArmFactStatus == TreatmentArmFactStatus.INCLUDE,
+		numReasons == 0)
+then
+	Set<String> identifiers = $taf.getAllMatchingPatientIdentifiers();
+	if (identifiers != null && identifiers.size() > 0) {
+		modify ($taf) {
+			setReason("The patient and treatment arm match on variant identifier [" + StringUtils.join(identifiers, ",") + "].")
+		}
+	}
+	
+	Set<String> nonhotspots = $taf.getAllMatchingPatientNonHotspotVariants();
+	if (nonhotspots != null && nonhotspots.size() > 0) {
+		modify ($taf) {
+			setReason("The patient and treatment arm match on non-hotspot variant [" + StringUtils.join(nonhotspots, ",") + "].")
+		}
+	}
+end
+
+/* Exclude all treatments that are included because patient concordance resolved to 'N'. */
+
+rule "Check patient concordance flag"
+when
+	$pf: PatientFact(concordance == 'N')
+	$taf: TreatmentArmFact(treatmentArmFactStatus == TreatmentArmFactStatus.INCLUDE)
+then
+	modify ($taf) {
+		setTreatmentArmFactStatus(TreatmentArmFactStatus.EXCLUDE),
+		setReason("The patient variant match this treatment arm but the patient concordance flag is 'N'."),
+		setReasonCategory(PatientAssignmentReasonCategory.NO_CONCORDANCE);
+	}
+end
+
+/* Exclude this treatment arm because the max allow number of patients has been reached. */
+
+rule "Check number of patients assigned to treatment arm"
+when
+	$taf: TreatmentArmFact(
+		treatmentArmFactStatus == TreatmentArmFactStatus.INCLUDE,
+		numPatientsAssigned >= maxPatientsAllowed)
+then
+	modify ($taf) {
+		setTreatmentArmFactStatus(TreatmentArmFactStatus.EXCLUDE),
+		setReason("The patient is eligible to be assigned to this treatment arm but the max number of allowed patients have been reached."),
+		setReasonCategory(PatientAssignmentReasonCategory.ARM_FULL);
+	}
+end
+
+/* Exclude this treatment arm because variant doesn't match and no exclusion matches. */
+
+rule "Patient and treatment arm variant does not match"
+when
+	$taf: TreatmentArmFact(
+		assignable == true, 
+		treatmentArmFactStatus == TreatmentArmFactStatus.UNKNOWN)
+then
+	modify ($taf) {
+		setTreatmentArmFactStatus(TreatmentArmFactStatus.EXCLUDE),
+		setReason("The patient contains no matching variant."),
+		setReasonCategory(PatientAssignmentReasonCategory.NO_VARIANT_MATCH);
+	}
+end

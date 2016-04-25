@@ -1,0 +1,90 @@
+[    
+    {
+        "ArmId": "EAY131-A",
+        "DrlFilePath": "/gov/match/rules/EAY131A_AssignmentLogic.drl"
+    },
+	{
+        "ArmId": "EAY131-B",
+        "DrlFilePath": "/gov/match/rules/EAY131B_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "EAY131-E",
+        "DrlFilePath": "/gov/match/rules/EAY131E_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "EAY131-F",
+        "DrlFilePath": "/gov/match/rules/EAY131F_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "EAY131-G",
+        "DrlFilePath": "/gov/match/rules/EAY131G_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "EAY131-H",
+        "DrlFilePath": "/gov/match/rules/EAY131H_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "EAY131-I",
+        "DrlFilePath": "/gov/match/rules/EAY131I_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "EAY131-L",
+        "DrlFilePath": "/gov/match/rules/EAY131L_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "EAY131-M",
+        "DrlFilePath": "/gov/match/rules/EAY131M_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "EAY131-N",
+        "DrlFilePath": "/gov/match/rules/EAY131N_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "EAY131-P",
+        "DrlFilePath": "/gov/match/rules/EAY131P_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "EAY131-Q",
+        "DrlFilePath": "/gov/match/rules/EAY131Q_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "EAY131-R",
+        "DrlFilePath": "/gov/match/rules/EAY131R_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "EAY131-S1",
+        "DrlFilePath": "/gov/match/rules/EAY131S1_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "EAY131-S2",
+        "DrlFilePath": "/gov/match/rules/EAY131S2_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "EAY131-T",
+        "DrlFilePath": "/gov/match/rules/EAY131T_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "EAY131-U",
+        "DrlFilePath": "/gov/match/rules/EAY131U_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "EAY131-V",
+        "DrlFilePath": "/gov/match/rules/EAY131V_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "EAY131-X",
+        "DrlFilePath": "/gov/match/rules/EAY131X_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "CukeTest-185",
+        "DrlFilePath": "/gov/match/rules/EAY131E_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "CukeTest-186",
+        "DrlFilePath": "/gov/match/rules/EAY131E_AssignmentLogic.drl"
+    },
+    {
+        "ArmId": "CukeTest-187",
+        "DrlFilePath": "/gov/match/rules/EAY131E_AssignmentLogic.drl"
+    }
+]
